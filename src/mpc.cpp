@@ -3,7 +3,10 @@
 //
 
 #include <iostream>
-#include "../include/mpc_ifopt/mpc.h"
+
+#include <mpc_ipopt/mpc.h>
+#include <mpc_ipopt/helpers.h>
+
 #include <cppad/ipopt/solve_result.hpp>
 #include <cppad/ipopt/solve.hpp>
 
@@ -17,7 +20,7 @@ using namespace mpc_ipopt;
 
 
 MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forward.steps),
-                     _indices(params.forward.steps) {
+                     cons_indices(params.forward.steps), varIndices(params.forward.steps) {
     assert(params.forward.steps > 2);
 
     // Initialize variables
@@ -25,7 +28,6 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     // We only need position at last step
     // thus dont need velocitys at last step
     // thus dont need accel at last two steps
-    num_vars = steps - 2;
 
     _vars = {2 * (steps - 2)};
 
@@ -46,7 +48,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
               {2 * (steps - 1)}};
     std::cout << cons_b.high.size() << std::endl;
 
-    for (auto i : _indices.v_r()) {
+    for (auto i : cons_indices.v_r()) {
         cons_b.low[i] = params.limits.vel.low;
         cons_b.high[i] = params.limits.vel.high;
         std::cout << i << std::endl;
@@ -54,7 +56,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     }
 
 
-    for (auto i : _indices.v_l()) {
+    for (auto i : cons_indices.v_l()) {
         cons_b.low[i] = params.limits.vel.low;
         cons_b.high[i] = params.limits.vel.high;
     }
@@ -67,7 +69,6 @@ void MPC::run() {
 
     std::string options;
 
-
     CppAD::ipopt::solve_result<Dvector> solution;
     CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
 
@@ -79,23 +80,20 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
     outputs[0] = 0;
     auto &objective_func = outputs[0];
 
-//    ADvector v_r = {_indices.v_r().length()};
-//    ADvector v_l = {_indices.v_l().length()};
-
     // First timestep
-    size_t vi = 0;
-    outputs[1 + *_indices.v_r()] = state.v_r + state.a_r * dt;
-    for (auto i : _indices.v_r(1)) {
-        outputs[1 + i] = outputs[1 + i - 1] + vars[vi++] * dt;
+
+    outputs[1 + *cons_indices.v_r()] = state.v_r + state.a_r * dt;
+    for (auto[i_acc, i_v] : zip(varIndices.a_r(), cons_indices.v_r(1))) {
+        outputs[1 + i_v] = outputs[1 + i_v - 1] + vars[i_acc] * dt;
     }
 
-    vi = 0;
-    outputs[1 + *_indices.v_l()] = state.v_r + state.a_l * dt;
-    for (auto i : _indices.v_l(1)) {
-        outputs[1 + i] = outputs[1 + i - 1] + vars[steps - 2 + vi++] * dt;
+    outputs[1 + *cons_indices.v_l()] = state.v_l + state.a_l * dt;
+    for (auto[i_acc, i_v] : zip(varIndices.a_l(), cons_indices.v_l(1))) {
+        outputs[1 + i_v] = outputs[1 + i_v - 1] + vars[i_acc] * dt;
     }
 
-    for (auto i : _indices.v_r() + _indices.v_l()) {
+
+    for (auto i : cons_indices.v_r() + cons_indices.v_l()) {
         objective_func -= outputs[1 + i];
     }
 }

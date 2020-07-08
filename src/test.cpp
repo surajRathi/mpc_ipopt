@@ -1,4 +1,4 @@
-#include <mpc_ifopt/mpc.h>
+#include <mpc_ipopt/mpc.h>
 #include <iostream>
 
 int main() {
