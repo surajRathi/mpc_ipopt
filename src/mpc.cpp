@@ -16,23 +16,25 @@ using namespace mpc_ipopt;
 // Diffrentiable vector of doubles
 
 
-MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forward.steps), _indices(steps) {
+MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forward.steps),
+                     _indices(params.forward.steps) {
     assert(params.forward.steps > 2);
 
+    // Initialize variables
     // Num_vars = [num_accelerations] * [num timesteps - 2]
     // We only need position at last step
     // thus dont need velocitys at last step
     // thus dont need accel at last two steps
     num_vars = steps - 2;
 
-    vars = {2 * (steps - 2)};
+    _vars = {2 * (steps - 2)};
 
-    vars_b = {{vars.size()},
-              {vars.size()}};
+    vars_b = {{_vars.size()},
+              {_vars.size()}};
 
-    // vars auto inited to 0
+    // _vars auto inited to 0
     // Init bounds
-    for (auto i : Range(0, vars.size())) {
+    for (auto i : Range(0, _vars.size())) {
         vars_b.low[i] = params.limits.acel.low;
         vars_b.high[i] = params.limits.acel.high;
     }
@@ -40,49 +42,60 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
 
     // Constraints:
     // For all but last time step we need to constrain velocity
-    cons_b = {{2 * steps},
-              {2 * steps}};
+    cons_b = {{2 * (steps - 1)},
+              {2 * (steps - 1)}};
+    std::cout << cons_b.high.size() << std::endl;
 
     for (auto i : _indices.v_r()) {
-        cons_b.low[i] = params.limits.acel.low;
-        cons_b.high[i] = params.limits.acel.high;
+        cons_b.low[i] = params.limits.vel.low;
+        cons_b.high[i] = params.limits.vel.high;
+        std::cout << i << std::endl;
+
     }
 
+
     for (auto i : _indices.v_l()) {
-        cons_b.low[i] = params.limits.acel.low;
-        cons_b.high[i] = params.limits.acel.high;
+        cons_b.low[i] = params.limits.vel.low;
+        cons_b.high[i] = params.limits.vel.high;
     }
+    std::cout << "b" << std::endl;
 }
 
 void MPC::run() {
-    const size_t num_vars = 1;
-    const size_t num_constraints = 1;
 
     std::cout << "run" << std::endl;
 
     std::string options;
 
 
-    Dvector vars{num_vars};
-    vars[0] = 3;
-
-    Dvector vars_lb{num_vars}, vars_ub{num_vars};
-    vars_lb[0] = 0.1;
-    vars_ub[0] = 10;
-
-    Dvector constraints_lb{num_constraints}, constraints_ub{num_constraints};
-    constraints_lb[0] = 1;
-    constraints_ub[0] = 20;
-
     CppAD::ipopt::solve_result<Dvector> solution;
+    CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
 
-    // CppAD::ipopt::solve<Dvector, MPC>(options, vars, vars_lb, vars_ub, constraints_lb, constraints_ub, *this, solution);
-    CppAD::ipopt::solve(options, vars, vars_lb, vars_ub, constraints_lb, constraints_ub, *this, solution);
-
-    std::cout << solution.status << " " << solution.x.size() << std::endl;
+    std::cout << solution.status << " " << solution.x << std::endl << solution.obj_value << std::endl << solution.g
+              << std::endl;
 }
 
 void MPC::operator()(ADvector &outputs, ADvector &vars) {
-    outputs[0] = vars[0];
-    outputs[1] = vars[0] * vars[0];
+    outputs[0] = 0;
+    auto &objective_func = outputs[0];
+
+//    ADvector v_r = {_indices.v_r().length()};
+//    ADvector v_l = {_indices.v_l().length()};
+
+    // First timestep
+    size_t vi = 0;
+    outputs[1 + *_indices.v_r()] = state.v_r + state.a_r * dt;
+    for (auto i : _indices.v_r(1)) {
+        outputs[1 + i] = outputs[1 + i - 1] + vars[vi++] * dt;
+    }
+
+    vi = 0;
+    outputs[1 + *_indices.v_l()] = state.v_r + state.a_l * dt;
+    for (auto i : _indices.v_l(1)) {
+        outputs[1 + i] = outputs[1 + i - 1] + vars[steps - 2 + vi++] * dt;
+    }
+
+    for (auto i : _indices.v_r() + _indices.v_l()) {
+        objective_func -= outputs[1 + i];
+    }
 }

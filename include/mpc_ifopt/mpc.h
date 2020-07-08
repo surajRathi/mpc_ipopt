@@ -8,6 +8,8 @@
 #include <cppad/cppad.hpp>
 #include <eigen3/Eigen/Core>
 
+#include <functional>
+
 
 namespace mpc_ipopt {
     using Dvector = CppAD::vector<double>;
@@ -31,12 +33,17 @@ namespace mpc_ipopt {
         } limits;
     };
 
+    struct State {
+        double x, y, theta, v_r, v_l, a_r, a_l;
+    };
+
 
     class Range {
-        const size_t last;
         size_t cur;
+        const size_t last;
     public:
-        Range(size_t start, size_t end) : cur(start), last(end) {}
+        Range(size_t start, size_t end) : cur(start), last(end) {
+        }
 
         // Iterable functions
         const Range &begin() const { return *this; }
@@ -44,23 +51,46 @@ namespace mpc_ipopt {
         const Range &end() const { return *this; }
 
         // Iterator functions
-        bool operator!=(const Range &) const { return cur < last; }
+        bool operator!=(const Range &r) const {
+            return cur < r.last;
+        }
 
-        void operator++() { ++cur; }
+        void operator++() {
+            ++cur;
+        }
 
         size_t operator*() const { return cur; }
+
+        size_t length() const { return last - cur; }
+
+        friend Range operator+(const Range &a, const Range &b) {
+            assert(a.last == b.cur);
+            return {a.cur, b.last};
+        }
     };
 
+//    template<typename... T>
+//    class zip {
+//        std::tuple<T...> containers;
+//    public:
+//        zip(T &&... containers) : containers(std::make_tuple(containers...)) {}
+//
+//        auto begin() { return std::make_tuple(std::apply([](auto x) { return std::begin(x); }, containers)); }
+//
+//        auto end() { return std::make_tuple(std::apply([](auto x) { return std::end(x); }, containers)); }
+//
+//    };
+
     // Stores indices of variables in constraints
-    struct Indices {
+    class Indices {
         const size_t _v_r, _v_l;
+    public:
+        Range v_r(size_t offset = 0) const { return {0 + offset, _v_r}; }
 
-        Range v_r() const { return {0, _v_r}; }
-
-        Range v_l() const { return {_v_r, _v_l}; }
+        Range v_l(size_t offset = 0) const { return {_v_r + offset, _v_l}; }
 
         explicit Indices(const size_t N) : _v_r{N - 1}, _v_l{_v_r + N - 1} {}
-    }
+    };
 
     class MPC {
         Params params;
@@ -71,11 +101,13 @@ namespace mpc_ipopt {
 
         /*const*/ size_t num_vars, num_constraints{};
 
-        Dvector vars;
+        Dvector _vars;
         LH<Dvector> vars_b, cons_b;
 
     public:
         using ADvector = CppAD::vector<CppAD::AD<double>>;
+
+        State state;
 
         explicit MPC(Params p);
 
