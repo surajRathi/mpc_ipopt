@@ -80,8 +80,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
     outputs[0] = 0;
     auto &objective_func = outputs[0];
 
-    // First timestep
-
+    // Update v_r and v_l
     outputs[1 + *cons_indices.v_r()] = state.v_r + state.a_r * dt;
     for (auto[i_acc, i_v] : zip(varIndices.a_r(), cons_indices.v_r(1))) {
         outputs[1 + i_v] = outputs[1 + i_v - 1] + vars[i_acc] * dt;
