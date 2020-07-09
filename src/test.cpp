@@ -2,8 +2,6 @@
 #include <iostream>
 
 int main() {
-    std::cout << "a" << std::endl;
-
     mpc_ipopt::Params p;
     p.forward.steps = 5;
     p.forward.frequency = 1;

@@ -12,6 +12,9 @@
 
 
 namespace mpc_ipopt {
+
+    // Vector of doubles
+    // Can also use std::vector or std::valarray
     using Dvector = CppAD::vector<double>;
 
 
@@ -36,34 +39,31 @@ namespace mpc_ipopt {
     };
 
     struct State {
-        double x, y, theta, v_r, v_l, a_r, a_l;
+        double x, y, theta, v_r, v_l;
     };
 
     // Stores indices of variables in constraints
-    class ConsIndices {
-        const size_t _v_r, _v_l;
-    public:
-        Range v_r(size_t offset = 0) const { return {0 + offset, _v_r}; }
 
-        Range v_l(size_t offset = 0) const { return {_v_r + offset, _v_l}; }
-
-        explicit ConsIndices(const size_t N) : _v_r{N - 1}, _v_l{_v_r + N - 1} {}
-    };
-
-    class VarIndices {
-        const size_t _a_r, _a_l;
-    public:
-        Range a_r(size_t offset = 0) const { return {0 + offset, _a_r}; }
-
-        Range a_l(size_t offset = 0) const { return {_a_r + offset, _a_l}; }
-
-        explicit VarIndices(const size_t N) : _a_r{N - 2}, _a_l{_a_r + N - 2} {}
-    };
 
     class MPC {
         Params params;
-        VarIndices varIndices;
-        ConsIndices cons_indices;
+
+        class Indices {
+            const size_t _a_r, _a_l;
+            const size_t _v_r, _v_l;
+        public:
+            Range a_r(size_t offset = 0) const { return {0 + offset, _a_r}; }
+
+            Range a_l(size_t offset = 0) const { return {_a_r + offset, _a_l}; }
+
+            Range v_r(size_t offset = 0) const { return {0 + offset, _v_r}; }
+
+            Range v_l(size_t offset = 0) const { return {_v_r + offset, _v_l}; }
+
+            explicit Indices(const size_t N) : _a_r{N - 1}, _a_l{_a_r + N - 1}, // Variables
+                                               _v_r{N - 1}, _v_l{_v_r + N - 1} // Constraints
+            {}
+        } indices;
 
         const double dt;
         const size_t steps; // reference?
@@ -74,7 +74,20 @@ namespace mpc_ipopt {
         LH<Dvector> vars_b, cons_b;
 
     public:
+        // Diffrentiable vector of doubles
+        // Can also use std::vector or std::valarray
         using ADvector = CppAD::vector<CppAD::AD<double>>;
+
+        class ConsWrapper {
+            ADvector &_outputs;
+        public:
+            explicit ConsWrapper(ADvector &outputs) : _outputs(outputs) {}
+
+            ADvector::value_type &operator[](size_t index) { return _outputs[1 + index]; }
+
+            // const ADvector::value_type &operator[](size_t index) const { return _outputs[1 + index]; }
+        };
+
 
         State state;
 

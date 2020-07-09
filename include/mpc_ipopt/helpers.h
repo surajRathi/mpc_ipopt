@@ -14,9 +14,9 @@ public:
     // Range() : cur(0), last(0) {}
 
     // Iterable functions
-    const Range &begin() const { return *this; }
+    [[nodiscard]] const Range &begin() const { return *this; }
 
-    const Range &end() const { return *this; }
+    [[nodiscard]] const Range &end() const { return *this; }
 
     // Iterator functions
     bool operator!=(const Range &r) const { return cur < r.last; }
@@ -31,7 +31,7 @@ public:
         return cur + index;
     }
 
-    size_t length() const { return last - cur; }
+    [[nodiscard]] size_t length() const { return last - cur; }
 
     friend Range operator+(const Range &a, const Range &b) {
         assert(a.last == b.cur);
@@ -39,17 +39,26 @@ public:
     }
 };
 
+// ONLY USE WITH Range
 template<typename T1, typename T2>
 class zip2 {
     std::pair<T1, T2> containers;
 public:
-    zip2(T1 t1, T2 t2) : containers(std::make_pair(t1, t2)) {}
+    zip2(T1 t1, T2 t2) : containers(std::make_pair(t1, t2)) {
+        /*
+         * this.val_end = std::end(containers[0]));
+         * this.containers = std::make_tuple(std::begin(containers[0]), std::begin(containers[1]));
+         */
+    }
 
-    auto begin() { return *this; /*std::make_tuple(std::begin(containers[0]), std::begin(containers[1]));*/ }
+    auto begin() { return *this; }
 
-    auto end() { return *this; /*std::make_tuple(std::end(containers[0]), std::end(containers[1]));*/ }
+    auto end() { return *this; }
 
-    bool operator!=(const zip2 &r) const { return containers.first != r.containers.first; }
+    bool operator!=(const zip2 &r) const {
+        return containers.first != r.containers.first;
+        /* return this.containers[0] != this.val_end; */
+    }
 
     void operator++() {
         ++containers.first;
