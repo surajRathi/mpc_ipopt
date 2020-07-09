@@ -24,13 +24,15 @@ namespace mpc_ipopt {
 
     struct Params {
         struct Forward {
-            double frequency;
-            size_t steps;
+            double frequency;   // Hz
+            size_t steps;       // Seconds
         } forward;
 
         struct Limits {
-            LH<double> vel, acel;
+            LH<double> vel, acc;
         } limits;
+
+        /*unsigned*/ double wheel_dist; // meters
     };
 
     struct State {
