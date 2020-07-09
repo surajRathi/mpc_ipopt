@@ -94,7 +94,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
         outputs[1 + i_v] = outputs[1 + i_v - 1] + vars[i_acc] * dt;
     }
 
-    // TODO: Should x be modelled complicatedly using the rotate around the IAR by theta method?
+    // TODO: Should state be modelled complicatedly using the rotate around the IAR by theta method?
     ADvector x{steps}, y{steps}, theta{steps};
 
     theta[0] = state.theta + (state.v_r - state.v_l) * dt / params.wheel_dist;
@@ -108,6 +108,11 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
 
     std::cout << x << std::endl << y << std::endl << theta << std::endl;
 
+    for (auto i : Range(0, x.size())) {
+        objective_func += x[i];
+        objective_func -= y[i];
+    }
+    
     for (auto i : cons_indices.v_r() + cons_indices.v_l()) {
         objective_func -= outputs[1 + i];
     }

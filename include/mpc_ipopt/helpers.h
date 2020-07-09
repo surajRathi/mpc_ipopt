@@ -11,6 +11,8 @@ class Range {
 public:
     Range(size_t start, size_t end) : cur(start), last(end) {}
 
+    // Range() : cur(0), last(0) {}
+
     // Iterable functions
     const Range &begin() const { return *this; }
 
@@ -86,16 +88,51 @@ public:
 
 //#include <utility>
 //
-//template<typename Tuple, size_t... Indices>
-//auto dereference_tuple_helper(Tuple &tuple, std::index_sequence<Indices...>) {
-//    return std::make_tuple(*(std::get<Indices>(tuple))...);
+//template<typename ...T, size_t ...I>
+//auto get_deref_helper(std::tuple<T...> &ts, std::index_sequence<I...>) {
+//    return std::make_tuple(*(std::get<I>(ts)) ...);
 //}
 //
-//        auto begin() { return std::make_tuple(std::apply([](auto x) { return std::begin(x); }, containers)); }
+//template<typename ...T>
+//std::tuple<> get_deref(std::tuple<T...> &ts) {
+//    return get_deref_helper(ts, std::make_index_sequence<sizeof...(T)>());
+//}
 //
-//        auto end() { return std::make_tuple(std::apply([](auto x) { return std::end(x); }, containers)); }
+//template<typename ...T, size_t ...I>
+//void get_inc_helper(std::tuple<T...> &ts, std::index_sequence<I...>) {
+//    std::tie((*(std::get<I>(ts)), 1) ...);
+//}
 //
-//    };
+//template<typename ...T>
+//void get_inc(std::tuple<T...> &ts) {
+//    get_inc_helper(ts, std::make_index_sequence<sizeof...(T)>());
+//}
+//
+//
+//template<typename... Ts>
+//class Zip {
+//    // TODO: we shouldnt require Ts to have a default constructor
+//    std::tuple<decltype(std::begin(Ts()))...> tup;
+////    std::tuple<std::invoke_result<std::begin,Ts>::type...> tup;
+//
+//    typename std::tuple_element<0, std::tuple<Ts...> >::type t_end;
+//    decltype(std::end(t_end)) end_pt;
+////    std::invoke_result<std::end, std::tuple_element<0, std::tuple<Ts...> >::type> end_pt;
+//
+//public:
+//    Zip(Ts... containers) : end_pt(std::end(std::get<0>(std::make_tuple(containers...)))),
+//                            tup{std::begin(containers)...} {}
+//
+//    auto begin() { return *this; }
+//
+//    auto end() { return *this; }
+//
+//    bool operator!=(const Zip &r) const { return std::get<0>(tup) != r.end_pt; }
+//
+//    bool operator++() { get_inc(tup); }
+//
+//    auto operator*() const { return get_deref(tup);/*return std::make_tuple(*std::get<Indices>(t));*/ }
+//};
 
 
 #endif //MPC_IPOPT_HELPERS_H
