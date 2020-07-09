@@ -68,8 +68,6 @@ namespace mpc_ipopt {
         const double dt;
         const size_t steps; // reference?
 
-//        /*const*/ size_t num_vars, num_constraints{};
-
         Dvector _vars;
         LH<Dvector> vars_b, cons_b;
 
@@ -88,16 +86,38 @@ namespace mpc_ipopt {
             // const ADvector::value_type &operator[](size_t index) const { return _outputs[1 + index]; }
         };
 
-
         State state;
+        Dvector global_plan;
 
         explicit MPC(Params p);
 
-        void run();
+        void solve(const State &s, const Dvector &plan);
+
+        void solve();
 
         // This sets the cost function and calculates constraints from variables
         void operator()(ADvector &outputs, ADvector &vars);
     };
+
+    // Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...
+    template<typename Tc, typename Tx>
+    Tx polyeval(const Tx &x, const Tc &coeffs) {
+        Tx ret = 0, pow = 1;
+        for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
+            ret += coeffs[i] * pow;
+        }
+        return ret;
+    }
+
+    /*// Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...
+    template<typename Tc>
+    typename Tc::value_type polyeval(typename Tc::value_type x, Tc coeffs) {
+        typename Tc::value_type ret = 0, pow = 1;
+        for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
+            ret += coeffs[i] * pow;
+        }
+        return ret;
+    }*/
 }
 
 #endif //MPC_IPOPT_MPC_H

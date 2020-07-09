@@ -74,16 +74,16 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
 }
 
 static const std::map<size_t, std::string> ipopt_error_to_string{
-        {0,  "not_defined"},
-        {1,  "success"},
-        {2,  "maxiter_exceeded"},
-        {3,  "stop_at_tiny_step"},
-        {4,  "stop_at_acceptable_point"},
-        {5,  "local_infeasibility"},
-        {6,  "user_requested_stop"},
-        {7,  "feasible_point_found"},
-        {8,  "diverging_iterates"},
-        {9,  "restoration_failure"},
+        {0, "not_defined"},
+        {1, "success"},
+        {2, "maxiter_exceeded"},
+        {3, "stop_at_tiny_step"},
+        {4, "stop_at_acceptable_point"},
+        {5, "local_infeasibility"},
+        {6, "user_requested_stop"},
+        {7, "feasible_point_found"},
+        {8, "diverging_iterates"},
+        {9, "restoration_failure"},
         {10, "error_in_step_computation"},
         {11, "invalid_number_detected"},
         {12, "too_few_degrees_of_freedom"},
@@ -91,7 +91,13 @@ static const std::map<size_t, std::string> ipopt_error_to_string{
         {14, "unknown"}
 };
 
-void MPC::run() {
+void MPC::solve(const State &s, const Dvector &plan) {
+    state = s;
+    global_plan = plan;
+    solve();
+}
+
+void MPC::solve() {
 
     std::cout << "run" << std::endl;
 
@@ -104,7 +110,7 @@ void MPC::run() {
     std::cout << std::fixed
               << "Stat: " << ipopt_error_to_string.at(solution.status) << std::endl
               << "cost: " << solution.obj_value << std::endl
-              << " Acc: " << solution.x
+              << " Acc: " << solution.x << std::endl
               << "cons: " << std::endl << "cons:" << solution.g << std::endl
               << std::scientific;
 }
@@ -141,7 +147,10 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
      *      x_i-1 + v_i => x_i
      *              x_i => e_i
      *
-     * There are n-1 of each acceleration, and state_variable
+     *      cte = sqrt(|f(x) - y|)
+     *      etheta = |
+     *
+     * There are n of each acceleration, and state_variable
      *
      * We assume velocity changes instantly.
      *
@@ -184,18 +193,23 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
     // TODO: Should state be modelled complicatedly using the rotate around the IAR by theta method?
     ADvector x{steps - 1}, y{steps - 1}, theta{steps - 1};
 
-//    theta[0] = state.theta + (state.v_r - state.v_l) * dt / params.wheel_dist;
-//    x[0] = state.x + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::cos(state.theta) / 2;
-//    y[0] = state.y + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::sin(state.theta) / 2;
-//    for (auto[t_i, v_r_i, v_l_i] : zip3(Range(1, steps - 1), indices.v_r(1), indices.v_l(1))) {
-//        std::cout << t_i << v_r_i << v_l_i << std::endl;
-//        theta[t_i] = theta[t_i - 1] + (cons[v_r_i] - cons[v_l_i]) * dt / params.wheel_dist;
-//        x[t_i] = x[t_i - 1
+    /*
+     * At t(i + 1): we use a_i to find v_i. Then we use v_i to find x_i
+     *
+     * Then find e_i
+     *
+     */
 
-//    for (auto i : Range(0, x.size())) {
-//        objective_func += x[i];
-//        objective_func -= y[i];
-//    }
+    theta[0] = state.theta + (state.v_r - state.v_l) * dt / params.wheel_dist;
+    x[0] = state.x + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::cos(state.theta) / 2;
+    y[0] = state.y + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::sin(state.theta) / 2;
+
+    for (auto[i, v_r_i, v_l_i] : zip3(Range(1, steps - 1), indices.v_r(1), indices.v_l(1))) {
+        theta[i] = theta[i - 1] + ((cons[v_r_i] - cons[v_l_i])) * dt / params.wheel_dist;
+
+        x[i] = x[i - 1] + (cons[v_r_i] + cons[v_l_i]) * dt * CppAD::cos(theta[i - 1]) / 2;
+        y[i] = x[i - 1] + (cons[v_r_i] + cons[v_l_i]) * dt * CppAD::sin(theta[i - 1]) / 2;
+    }
 
     for (auto i : indices.v_r() + indices.v_l()) {
         objective_func -= outputs[1 + i];
