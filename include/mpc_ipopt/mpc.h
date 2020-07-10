@@ -17,29 +17,34 @@ namespace mpc_ipopt {
     // Can also use std::vector or std::valarray
     using Dvector = CppAD::vector<double>;
 
+    template<typename T>
+    struct State_ {
+        T x, y, theta, v_r, v_l;
+    };
+
+    using State = State_<Dvector::value_type>;
+
 
     // Stores a pair of values low and high
     template<typename T>
     struct LH {
         T low, high;
     };
-
-
     struct Params {
         struct Forward {
             double frequency;   // Hz
-            size_t steps;       // Seconds
+            size_t steps;       // time steps
         } forward;
 
         struct Limits {
             LH<double> vel, acc;
         } limits;
 
+        struct Weights {
+            double acc, vel, cte;
+        } wt;
+        double v_ref;
         /*unsigned*/ double wheel_dist; // meters
-    };
-
-    struct State {
-        double x, y, theta, v_r, v_l;
     };
 
     // Stores indices of variables in constraints
@@ -49,20 +54,35 @@ namespace mpc_ipopt {
         Params params;
 
         class Indices {
+        private:
+            // Variables
             const size_t _a_r, _a_l;
+        public:
+            const size_t vars_length;
+
+            [[nodiscard]] Range a_r(size_t offset = 0) const { return {0 + offset, _a_r}; }
+
+            [[nodiscard]] Range a_l(size_t offset = 0) const { return {_a_r + offset, _a_l}; }
+
+        private:
+            // Constraints
             const size_t _v_r, _v_l;
         public:
-            Range a_r(size_t offset = 0) const { return {0 + offset, _a_r}; }
+            const size_t cons_length;
 
-            Range a_l(size_t offset = 0) const { return {_a_r + offset, _a_l}; }
+            [[nodiscard]] Range v_r(size_t offset = 0) const { return {0 + offset, _v_r}; }
 
-            Range v_r(size_t offset = 0) const { return {0 + offset, _v_r}; }
+            [[nodiscard]] Range v_l(size_t offset = 0) const { return {_v_r + offset, _v_l}; }
 
-            Range v_l(size_t offset = 0) const { return {_v_r + offset, _v_l}; }
-
-            explicit Indices(const size_t N) : _a_r{N - 1}, _a_l{_a_r + N - 1}, // Variables
-                                               _v_r{N - 1}, _v_l{_v_r + N - 1} // Constraints
-            {}
+            // Constructor
+        public:
+            explicit Indices(const size_t N) :
+            // Variables
+                    _a_r{N}, _a_l{_a_r + N},
+                    vars_length{_a_l},
+                    // Constraints
+                    _v_r{N}, _v_l{_v_r + N},
+                    cons_length{_v_l} {}
         } indices;
 
         const double dt;
@@ -71,10 +91,13 @@ namespace mpc_ipopt {
         Dvector _vars;
         LH<Dvector> vars_b, cons_b;
 
+        std::vector<State> get_states(const Dvector &vars, const Dvector &cons, const State &initial);
+
     public:
         // Diffrentiable vector of doubles
         // Can also use std::vector or std::valarray
         using ADvector = CppAD::vector<CppAD::AD<double>>;
+        using ADState = State_<ADvector::value_type &>;
 
         class ConsWrapper {
             ADvector &_outputs;
@@ -91,9 +114,9 @@ namespace mpc_ipopt {
 
         explicit MPC(Params p);
 
-        void solve(const State &s, const Dvector &plan);
+//        void solve(const State &s, const Dvector &plan);
 
-        void solve();
+        bool solve(std::pair<double, double> &acc);
 
         // This sets the cost function and calculates constraints from variables
         void operator()(ADvector &outputs, ADvector &vars);

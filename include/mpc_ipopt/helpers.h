@@ -9,7 +9,7 @@ class Range {
     size_t cur;
     const size_t last;
 public:
-    Range(size_t start, size_t end) : cur(start), last(end) {}
+    Range(size_t start, const size_t end) : cur(start), last(end) {}
 
     // Range() : cur(0), last(0) {}
 

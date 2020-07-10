@@ -38,52 +38,44 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
 
 
     // Initialize variables
-    // Num_vars = [num_accelerations] * [num timesteps - 1]
+    // Num_vars = [num_accelerations] * [num timesteps]
 
 
-    _vars = {2 * (steps - 1)};
+    _vars = {indices.vars_length};
 
-    vars_b = {{_vars.size()},
-              {_vars.size()}};
+    vars_b = {{indices.vars_length},
+              {indices.vars_length}};
 
     // _vars auto inited to 0
     // Init bounds
-    for (auto i : Range(0, _vars.size())) {
+    for (auto i : indices.a_r() + indices.a_l()) {
         vars_b.low[i] = params.limits.acc.low;
         vars_b.high[i] = params.limits.acc.high;
     }
 
 
     // Constraints:
-    // For all but last time step we need to constrain velocity
-    cons_b = {{2 * (steps - 1)},
-              {2 * (steps - 1)}};
+    // v_r, v_l
+    cons_b = {{indices.cons_length},
+              {indices.cons_length}};
 
-    for (auto i : indices.v_r()) {
-        cons_b.low[i] = params.limits.vel.low;
-        cons_b.high[i] = params.limits.vel.high;
-        std::cout << i << std::endl;
-
-    }
-
-
-    for (auto i : indices.v_l()) {
+    for (auto i : indices.v_r() + indices.v_l()) {
         cons_b.low[i] = params.limits.vel.low;
         cons_b.high[i] = params.limits.vel.high;
     }
 }
 
 static const std::map<size_t, std::string> ipopt_error_to_string{
-        {0, "not_defined"},
-        {1, "success"},
-        {2, "maxiter_exceeded"},
-        {3, "stop_at_tiny_step"},
-        {4, "stop_at_acceptable_point"},
-        {5, "local_infeasibility"},
-        {6, "user_requested_stop"},
-        {7, "feasible_point_found"},
-        {8, "diverging_iterates"},
-        {9, "restoration_failure"},
+        {0,  "not_defined"},
+        {1,  "success"},
+        {2,  "maxiter_exceeded"},
+        {3,  "stop_at_tiny_step"},
+        {4,  "stop_at_acceptable_point"},
+        {5,  "local_infeasibility"},
+        {6,  "user_requested_stop"},
+        {7,  "feasible_point_found"},
+        {8,  "diverging_iterates"},
+        {9,  "restoration_failure"},
         {10, "error_in_step_computation"},
         {11, "invalid_number_detected"},
         {12, "too_few_degrees_of_freedom"},
@@ -91,14 +83,8 @@ static const std::map<size_t, std::string> ipopt_error_to_string{
         {14, "unknown"}
 };
 
-void MPC::solve(const State &s, const Dvector &plan) {
-    state = s;
-    global_plan = plan;
-    solve();
-}
 
-void MPC::solve() {
-
+bool MPC::solve(std::pair<double, double> &acc) {
     std::cout << "run" << std::endl;
 
     std::string options;
@@ -106,13 +92,27 @@ void MPC::solve() {
 
     CppAD::ipopt::solve_result<Dvector> solution;
     CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
-
-    std::cout << std::fixed
+    if (solution.status != CppAD::ipopt::solve_result<Dvector>::success)
+        return false;
+    /*std::cout << std::fixed
               << "Stat: " << ipopt_error_to_string.at(solution.status) << std::endl
               << "cost: " << solution.obj_value << std::endl
               << " Acc: " << solution.x << std::endl
-              << "cons: " << std::endl << "cons:" << solution.g << std::endl
+              << "cons:" << solution.g << std::endl
+              //              << "   x:" << x << std::endl
+              //              << "   y:" << y << std::endl
+              //              << "thet:" << theta << std::endl
               << std::scientific;
+
+    std::cout << std::fixed << "[";
+    for (auto s : get_states(solution.x, solution.g, state)) {
+        std::cout << "(" << s.x << ", " << s.y << ", " << s.theta << "), ";
+    }
+    std::cout << "]" << std::endl << std::scientific;*/
+    acc.first = solution.x[indices.a_r()[0]];
+    acc.second = solution.x[indices.a_l()[0]];
+
+    return true;
 }
 
 void MPC::operator()(ADvector &outputs, ADvector &vars) {
@@ -178,40 +178,73 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
      * ONLY two Ranges that are adjacent can be combined using the '+' operator. Dont use it.
      */
 
-    // Update v_r and v_l
-    // v_i = v_i-1 + a_i * dt
-    cons[indices.v_r()[0]] = state.v_r + vars[indices.a_r()[0]] * dt;
-    for (auto[i_acc, i_v] : zip2(indices.a_r(1), indices.v_r(1))) {
-        cons[i_v] = cons[i_v - 1] + vars[i_acc] * dt;
+    ADvector x{steps}, y{steps}, theta{steps};
+    ADvector old_state{5};
+    {
+        old_state[0] = state.x;
+        old_state[1] = state.y;
+        old_state[2] = state.theta;
+        old_state[3] = state.v_r;
+        old_state[4] = state.v_l;
     }
 
-    cons[indices.v_l()[0]] = state.v_l + vars[indices.a_l()[0]] * dt;
-    for (auto[i_acc, i_v] : zip2(indices.a_l(1), indices.v_l(1))) {
-        cons[i_v] = cons[i_v - 1] + vars[i_acc] * dt;
+    ADState prev{old_state[0], old_state[1], old_state[2], old_state[3], old_state[4]};
+
+    Range a_r_r{indices.a_r()}, a_l_r{indices.a_l()},
+            v_r_r{indices.v_r()}, v_l_r{indices.v_l()};
+
+    for (auto t : Range{0, steps}) {
+        // std::cout << "Indice: " << t << std::endl;
+
+        cons[*v_r_r] = prev.v_r + vars[*a_r_r] * dt;
+        cons[*v_l_r] = prev.v_l + vars[*a_l_r] * dt;
+        x[t] = prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2;
+        y[t] = prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2;
+        theta[t] = prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist;
+
+
+
+        objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] + vars[*a_l_r], 2);
+        objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] - vars[*a_l_r], 2);
+
+        objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] + cons[*v_l_r] - 2 * params.v_ref, 2);
+        objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2);// - 2 * params.v_ref, 2);
+
+        objective_func += params.wt.cte * CppAD::pow(polyeval(x[t], global_plan) - y[t], 2);
+
+        prev.x = x[t], prev.y = y[t], prev.theta = theta[t], prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
+        ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
+    }
+}
+
+std::vector<State> MPC::get_states(const Dvector &vars, const Dvector &cons, const State &initial) {
+    std::vector<State> v;
+    v.emplace_back(initial);
+
+    Range a_r_r{indices.a_r()}, a_l_r{indices.a_l()},
+            v_r_r{indices.v_r()}, v_l_r{indices.v_l()};
+
+    for (auto t : Range{0, steps}) {
+        const auto &prev = v.back();
+
+        State cur{
+                prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2,
+                prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2,
+                prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist,
+                cons[*v_r_r],
+                cons[*v_l_r]
+        };
+        v.push_back(cur);
+        /*double v_r = cons[*v_r_r], v_l = cons[*v_l_r];
+        v.emplace_back(State{
+                prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2,
+                prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2,
+                prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist,
+                v_r,
+                v_l
+        });*/
+        ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
     }
 
-    // TODO: Should state be modelled complicatedly using the rotate around the IAR by theta method?
-    ADvector x{steps - 1}, y{steps - 1}, theta{steps - 1};
-
-    /*
-     * At t(i + 1): we use a_i to find v_i. Then we use v_i to find x_i
-     *
-     * Then find e_i
-     *
-     */
-
-    theta[0] = state.theta + (state.v_r - state.v_l) * dt / params.wheel_dist;
-    x[0] = state.x + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::cos(state.theta) / 2;
-    y[0] = state.y + (cons[indices.v_r()[0]] + cons[indices.v_l()[0]]) * dt * CppAD::sin(state.theta) / 2;
-
-    for (auto[i, v_r_i, v_l_i] : zip3(Range(1, steps - 1), indices.v_r(1), indices.v_l(1))) {
-        theta[i] = theta[i - 1] + ((cons[v_r_i] - cons[v_l_i])) * dt / params.wheel_dist;
-
-        x[i] = x[i - 1] + (cons[v_r_i] + cons[v_l_i]) * dt * CppAD::cos(theta[i - 1]) / 2;
-        y[i] = x[i - 1] + (cons[v_r_i] + cons[v_l_i]) * dt * CppAD::sin(theta[i - 1]) / 2;
-    }
-
-    for (auto i : indices.v_r() + indices.v_l()) {
-        objective_func -= outputs[1 + i];
-    }
+    return v;
 }
