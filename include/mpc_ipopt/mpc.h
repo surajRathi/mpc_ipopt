@@ -10,14 +10,25 @@
 
 #include "helpers.h"
 
+/*
+ * Using MPC:
+ * Initialize MPC object with the Params object
+ * For every iteration"
+ * Set the state and global plan member variables
+ * Call solve and get acceleration
+ * Profit
+ */
 
 namespace mpc_ipopt {
-
-    // Vector of doubles
-    // Can also use std::vector or std::valarray
-    using Dvector = CppAD::vector<double>;
-
+    // Can also use std::vector or std::valarray or eigen::vector or CppAD::vector
+    // TODO: What should we use
     template<typename T>
+    using vector = CppAD::vector<T>;
+
+    // Non-differentiable vector of doubles
+    using Dvector = vector<double>;
+
+    template<typename T> // Templatised so we can use for double and AD<double>
     struct State_ {
         T x, y, theta, v_r, v_l;
     };
@@ -25,11 +36,12 @@ namespace mpc_ipopt {
     using State = State_<Dvector::value_type>;
 
 
-    // Stores a pair of values low and high
+    // Stores a pair of values: 'low' and 'high'
     template<typename T>
     struct LH {
         T low, high;
     };
+
     struct Params {
         struct Forward {
             double frequency;   // Hz
@@ -43,17 +55,35 @@ namespace mpc_ipopt {
         struct Weights {
             double acc, vel, cte;
         } wt;
+
         double v_ref;
         /*unsigned*/ double wheel_dist; // meters
     };
 
-    // Stores indices of variables in constraints
-
 
     class MPC {
-        Params params;
+    public:
+        // Diffrentiable vector of doubles
+        // Can also use std::vector or std::valarray
+        using ADvector = vector<CppAD::AD<double>>; // Exposed for ipopt
+    private:
+        // Diffrentiable version of state
+        // required in operator()
+        using ADState = State_<ADvector::value_type &>;
 
-        class Indices {
+
+        // Parameters
+        // TODO: Make editable with automatic indices reload.
+        const Params params;
+        const double dt; /* = 1 / params.forward.frequency */
+        const size_t &steps;
+
+        std::string options; // TODO: Parameterize options
+
+
+        // TODO: Better declaration format
+        // Stores indices of variables and constraints
+        const class Indices {
         private:
             // Variables
             const size_t _a_r, _a_l;
@@ -85,20 +115,12 @@ namespace mpc_ipopt {
                     cons_length{_v_l} {}
         } indices;
 
-        const double dt;
-        const size_t steps; // reference?
 
+        // Vector with inital value of variables. Doesn't change
         Dvector _vars;
         LH<Dvector> vars_b, cons_b;
 
-        std::vector<State> get_states(const Dvector &vars, const Dvector &cons, const State &initial);
-
-    public:
-        // Diffrentiable vector of doubles
-        // Can also use std::vector or std::valarray
-        using ADvector = CppAD::vector<CppAD::AD<double>>;
-        using ADState = State_<ADvector::value_type &>;
-
+        // TODO: move to helper.h
         class ConsWrapper {
             ADvector &_outputs;
         public:
@@ -109,16 +131,25 @@ namespace mpc_ipopt {
             // const ADvector::value_type &operator[](size_t index) const { return _outputs[1 + index]; }
         };
 
-        State state;
-        Dvector global_plan;
+
+        // Calculates x,y,theta from velocity (stored in the constraints) and initial state.
+        std::vector<State> get_states(const Dvector &cons, const State &initial);
+
+    public:
 
         explicit MPC(Params p);
 
-//        void solve(const State &s, const Dvector &plan);
 
+        // These should be updated before calling solve
+        State state;
+        Dvector global_plan;
+
+        // Calculate's optimal acceleration for given state and constraints.
         bool solve(std::pair<double, double> &acc);
 
+
         // This sets the cost function and calculates constraints from variables
+        // ONLY CALLED BY IPOPT
         void operator()(ADvector &outputs, ADvector &vars);
     };
 
@@ -131,16 +162,6 @@ namespace mpc_ipopt {
         }
         return ret;
     }
-
-    /*// Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...
-    template<typename Tc>
-    typename Tc::value_type polyeval(typename Tc::value_type x, Tc coeffs) {
-        typename Tc::value_type ret = 0, pow = 1;
-        for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
-            ret += coeffs[i] * pow;
-        }
-        return ret;
-    }*/
 }
 
 #endif //MPC_IPOPT_MPC_H

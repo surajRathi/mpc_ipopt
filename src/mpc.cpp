@@ -17,6 +17,15 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
                      indices(params.forward.steps), state{} {
     assert(params.forward.steps > 1);
 
+
+    // CppAD::ipopt options
+    options += "Integer print_level  0\n";
+    // TODO take as pparams
+    options += "Sparse  true        forward\n";
+    //options += "Sparse  true        reverse\n";
+    options += "Numeric max_cpu_time          0.5\n";
+
+
     /*
     * State consists of x, y, theta, v_r, v_l.
     * Input values should be in robot frame at t=0 for the model,
@@ -87,9 +96,6 @@ static const std::map<size_t, std::string> ipopt_error_to_string{
 bool MPC::solve(std::pair<double, double> &acc) {
     std::cout << "run" << std::endl;
 
-    std::string options;
-    options += "Integer print_level  0\n";
-
     CppAD::ipopt::solve_result<Dvector> solution;
     CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
     if (solution.status != CppAD::ipopt::solve_result<Dvector>::success)
@@ -105,7 +111,7 @@ bool MPC::solve(std::pair<double, double> &acc) {
               << std::scientific;
 
     std::cout << std::fixed << "[";
-    for (auto s : get_states(solution.x, solution.g, state)) {
+    for (auto s : get_states(solution.g, state)) {
         std::cout << "(" << s.x << ", " << s.y << ", " << s.theta << "), ";
     }
     std::cout << "]" << std::endl << std::scientific;*/
@@ -178,7 +184,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
      * ONLY two Ranges that are adjacent can be combined using the '+' operator. Dont use it.
      */
 
-    ADvector x{steps}, y{steps}, theta{steps};
+    ADvector::value_type x{0}, y{0}, theta{0};
     ADvector old_state{5};
     {
         old_state[0] = state.x;
@@ -188,20 +194,21 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
         old_state[4] = state.v_l;
     }
 
+    // TODO: move inside loop?
     ADState prev{old_state[0], old_state[1], old_state[2], old_state[3], old_state[4]};
 
     Range a_r_r{indices.a_r()}, a_l_r{indices.a_l()},
             v_r_r{indices.v_r()}, v_l_r{indices.v_l()};
 
+    // I think we have to use only CppAD operations (pow) for differentiability
     for (auto t : Range{0, steps}) {
-        // std::cout << "Indice: " << t << std::endl;
 
         cons[*v_r_r] = prev.v_r + vars[*a_r_r] * dt;
         cons[*v_l_r] = prev.v_l + vars[*a_l_r] * dt;
-        x[t] = prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2;
-        y[t] = prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2;
-        theta[t] = prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist;
 
+        x = prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2;
+        y = prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2;
+        theta = prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist;
 
 
         objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] + vars[*a_l_r], 2);
@@ -210,14 +217,14 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
         objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] + cons[*v_l_r] - 2 * params.v_ref, 2);
         objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2);// - 2 * params.v_ref, 2);
 
-        objective_func += params.wt.cte * CppAD::pow(polyeval(x[t], global_plan) - y[t], 2);
+        objective_func += params.wt.cte * CppAD::pow(polyeval(x, global_plan) - y, 2);
 
-        prev.x = x[t], prev.y = y[t], prev.theta = theta[t], prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
+        prev.x = x, prev.y = y, prev.theta = theta, prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
     }
 }
 
-std::vector<State> MPC::get_states(const Dvector &vars, const Dvector &cons, const State &initial) {
+std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) {
     std::vector<State> v;
     v.emplace_back(initial);
 
@@ -235,6 +242,7 @@ std::vector<State> MPC::get_states(const Dvector &vars, const Dvector &cons, con
                 cons[*v_l_r]
         };
         v.push_back(cur);
+
         /*double v_r = cons[*v_r_r], v_l = cons[*v_l_r];
         v.emplace_back(State{
                 prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2,
@@ -243,6 +251,7 @@ std::vector<State> MPC::get_states(const Dvector &vars, const Dvector &cons, con
                 v_r,
                 v_l
         });*/
+
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
     }
 
