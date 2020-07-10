@@ -1,14 +1,10 @@
-//
-// Created by suraj on 7/5/20.
-//
-
 #ifndef MPC_IPOPT_MPC_H
 #define MPC_IPOPT_MPC_H
 
 #include <cppad/cppad.hpp>
 #include <eigen3/Eigen/Core>
 
-#include "helpers.h"
+#include "mpc_ipopt/helpers.h"
 
 /*
  * Using MPC:
@@ -17,6 +13,12 @@
  * Set the state and global plan member variables
  * Call solve and get acceleration
  * Profit
+ *
+ * Intended to be use by mpc_local_planner
+ *
+ * Written for vehicle path planning task
+ *
+ * TODO: Rename this package
  */
 
 namespace mpc_ipopt {

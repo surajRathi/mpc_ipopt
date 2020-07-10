@@ -1,11 +1,6 @@
-//
-// Created by suraj on 7/5/20.
-//
-
 #include <iostream>
 
 #include <mpc_ipopt/mpc.h>
-#include <mpc_ipopt/helpers.h>
 
 #include <cppad/ipopt/solve_result.hpp>
 #include <cppad/ipopt/solve.hpp>
@@ -19,7 +14,8 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
 
 
     // CppAD::ipopt options
-    options += "Integer print_level  0\n";
+    options += "Integer print_level  0\n"; // Disables all debug information
+    options += "String sb yes\n"; // Disables printing IPOPT creator banner
     // TODO take as pparams
     options += "Sparse  true        forward\n";
     //options += "Sparse  true        reverse\n";
@@ -35,6 +31,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     */
 
     // General idea
+    // See operator() for more details
 
     // Thus (a_r, a_l)_(0...N-1)] are the VARIABLES
     // We get their indices from varIndices.a_{r,l}()
@@ -45,6 +42,8 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     // We get their indices from consIndices.v_{r,l}()
     // They are accessed through `cons`
 
+
+    // TODO: Allow dynamic configeration of variables, bounds, etc.
 
     // Initialize variables
     // Num_vars = [num_accelerations] * [num timesteps]
@@ -74,6 +73,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     }
 }
 
+// Ignore warning
 static const std::map<size_t, std::string> ipopt_error_to_string{
         {0,  "not_defined"},
         {1,  "success"},
@@ -94,10 +94,10 @@ static const std::map<size_t, std::string> ipopt_error_to_string{
 
 
 bool MPC::solve(std::pair<double, double> &acc) {
-    std::cout << "run" << std::endl;
 
     CppAD::ipopt::solve_result<Dvector> solution;
     CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
+
     if (solution.status != CppAD::ipopt::solve_result<Dvector>::success)
         return false;
     /*std::cout << std::fixed
@@ -115,16 +115,20 @@ bool MPC::solve(std::pair<double, double> &acc) {
         std::cout << "(" << s.x << ", " << s.y << ", " << s.theta << "), ";
     }
     std::cout << "]" << std::endl << std::scientific;*/
+
     acc.first = solution.x[indices.a_r()[0]];
     acc.second = solution.x[indices.a_l()[0]];
+
+    // TODO: return more things
 
     return true;
 }
 
 void MPC::operator()(ADvector &outputs, ADvector &vars) const {
-    outputs[0] = 0;
     auto &objective_func = outputs[0];
     ConsWrapper cons{outputs};
+
+    objective_func = 0;
 
     /* Indicing
      *
@@ -184,7 +188,10 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
      * ONLY two Ranges that are adjacent can be combined using the '+' operator. Dont use it.
      */
 
+    // Diffrential doubles
     ADvector::value_type x{0}, y{0}, theta{0};
+
+    // TODO: move inside loop?
     ADvector old_state{5};
     {
         old_state[0] = state.x;
@@ -193,19 +200,22 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
         old_state[3] = state.v_r;
         old_state[4] = state.v_l;
     }
-
-    // TODO: move inside loop?
     ADState prev{old_state[0], old_state[1], old_state[2], old_state[3], old_state[4]};
 
+
+    // TODO: Wrap this so the for loop directy gives velocities. But maybe not required.
+    // Indicing
     Range a_r_r{indices.a_r()}, a_l_r{indices.a_l()},
             v_r_r{indices.v_r()}, v_l_r{indices.v_l()};
 
     // I think we have to use only CppAD operations (pow) for differentiability
     for (auto t : Range{0, steps}) {
 
+        // Calculate velocities
         cons[*v_r_r] = prev.v_r + vars[*a_r_r] * dt;
         cons[*v_l_r] = prev.v_l + vars[*a_l_r] * dt;
 
+        // Calculate state
         x = prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2;
         y = prev.y + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::sin(prev.theta) / 2;
         theta = prev.theta + (cons[*v_r_r] - cons[*v_l_r]) * dt / params.wheel_dist;
@@ -224,6 +234,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
     }
 }
 
+// Parts of this function lifted from operator()
 std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) const {
     std::vector<State> v;
     v.emplace_back(initial);

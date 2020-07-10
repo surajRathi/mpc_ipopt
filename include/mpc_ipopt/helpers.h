@@ -1,17 +1,21 @@
 #ifndef MPC_IPOPT_HELPERS_H
 #define MPC_IPOPT_HELPERS_H
-// TODO: Move to .cpp file?
+// TODO: Move to a .cpp file?
 
-// Used like this:
-// for (auto i : Range(3, 6)) { // Do something }
-// This will loop with i = 3, 4, 5
+/*
+ * This is a class similar to Python's range builtin
+ * It works with c++ for each loop
+ *
+ * for (auto i : Range(3, 6)) { // Do something }
+ * This will loop with i = 3, 4, 5
+ *
+ * This functions as an iterator too.
+ */
 class Range {
     size_t cur;
     const size_t last;
 public:
     Range(size_t start, const size_t end) : cur(start), last(end) {}
-
-    // Range() : cur(0), last(0) {}
 
     // Iterable functions
     [[nodiscard]] const Range &begin() const { return *this; }
@@ -25,7 +29,6 @@ public:
 
     size_t operator*() const { return cur; }
 
-
     size_t operator[](size_t index) const {
         assert(index < length());
         return cur + index;
@@ -38,6 +41,7 @@ public:
         return {a.cur, b.last};
     }
 };
+
 
 // ONLY USE WITH Range
 template<typename T1, typename T2>
@@ -120,7 +124,7 @@ public:
 //
 //template<typename... Ts>
 //class Zip {
-//    // TODO: we shouldnt require Ts to have a default constructor
+//    // : we shouldnt require Ts to have a default constructor
 //    std::tuple<decltype(std::begin(Ts()))...> tup;
 ////    std::tuple<std::invoke_result<std::begin,Ts>::type...> tup;
 //
