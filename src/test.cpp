@@ -2,7 +2,7 @@
 #include <iostream>
 
 int main() {
-    mpc_ipopt::Params p;
+    mpc_ipopt::Params p{};
     p.forward.steps = 20;
     p.forward.frequency = 20;
     p.limits.vel = {-1, 1};
@@ -20,7 +20,7 @@ int main() {
     mpc.state.v_r = 0.3;
     mpc.state.v_l = 0.7;
 
-    std::pair<double, double> acc;
-    mpc.solve(acc);
+    mpc_ipopt::MPC::Result res;
+    mpc.solve(res, false);
     return 0;
 }

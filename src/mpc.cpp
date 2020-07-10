@@ -1,4 +1,5 @@
-//#include <iostream>
+#include <iostream>
+#include <chrono>
 
 #include <mpc_ipopt/mpc.h>
 
@@ -74,7 +75,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
 }
 
 // Ignore warning
-static const std::map<size_t, std::string> ipopt_error_to_string{
+const std::map<size_t, std::string> mpc_ipopt::MPC::error_string = {
         {0,  "not_defined"},
         {1,  "success"},
         {2,  "maxiter_exceeded"},
@@ -93,15 +94,23 @@ static const std::map<size_t, std::string> ipopt_error_to_string{
 };
 
 
-bool MPC::solve(std::pair<double, double> &acc) {
+bool MPC::solve(Result &result, bool get_path) {
 
     CppAD::ipopt::solve_result<Dvector> solution;
+
+    const auto start = std::chrono::high_resolution_clock::now();
+
     CppAD::ipopt::solve(options, _vars, vars_b.low, vars_b.high, cons_b.low, cons_b.high, *this, solution);
 
-    if (solution.status != CppAD::ipopt::solve_result<Dvector>::success)
+    std::cout << "IPOPT " << std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count() << "ms." << std::endl;
+
+    if (solution.status != CppAD::ipopt::solve_result<Dvector>::success) {
+        result.status = solution.status;
         return false;
+    }
     /*std::cout << std::fixed
-              << "Stat: " << ipopt_error_to_string.at(solution.status) << std::endl
+              << "Stat: " << error_string.at(solution.status) << std::endl
               << "cost: " << solution.obj_value << std::endl
               << " Acc: " << solution.x << std::endl
               << "cons:" << solution.g << std::endl
@@ -116,15 +125,20 @@ bool MPC::solve(std::pair<double, double> &acc) {
     }
     std::cout << "]" << std::endl << std::scientific;*/
 
-    acc.first = solution.x[indices.a_r()[0]];
-    acc.second = solution.x[indices.a_l()[0]];
+    result.status = solution.status;
+    result.acc.first = solution.x[indices.a_r()[0]];
+    result.acc.second = solution.x[indices.a_l()[0]];
 
-    // TODO: return more things
+    if (get_path) {
+        get_states(solution.g, state, result.path);
+    }
 
     return true;
 }
 
 void MPC::operator()(ADvector &outputs, ADvector &vars) const {
+//    const auto start = std::chrono::high_resolution_clock::now();  // ~0 ms
+
     auto &objective_func = outputs[0];
     ConsWrapper cons{outputs};
 
@@ -234,18 +248,24 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
         prev.x = x, prev.y = y, prev.theta = theta, prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
     }
+
+//    std::cout << "Forward graph took " << std::chrono::duration_cast<std::chrono::milliseconds>(
+//            std::chrono::high_resolution_clock::now() - start).count() << "ms." << std::endl;  // ~0 ms
 }
 
 // Parts of this function lifted from operator()
-std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) const {
-    std::vector<State> v;
-    v.emplace_back(initial);
+void MPC::get_states(const Dvector &cons, const State &initial, std::vector<State> &path_vector) const {
+    path_vector.clear();
+    path_vector.reserve(steps + 1);
+
+    // TODO: Should we put initial?
+    path_vector.emplace_back(initial);
 
     Range a_r_r{indices.a_r()}, a_l_r{indices.a_l()},
             v_r_r{indices.v_r()}, v_l_r{indices.v_l()};
 
     for (auto t : Range{0, steps}) {
-        const auto &prev = v.back();
+        const auto &prev = path_vector.back();
 
         State cur{
                 prev.x + (cons[*v_r_r] + cons[*v_l_r]) * dt * CppAD::cos(prev.theta) / 2,
@@ -254,7 +274,7 @@ std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) co
                 cons[*v_r_r],
                 cons[*v_l_r]
         };
-        v.push_back(cur);
+        path_vector.push_back(cur);
 
         /*double v_r = cons[*v_r_r], v_l = cons[*v_l_r];
         v.emplace_back(State{
@@ -267,6 +287,4 @@ std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) co
 
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
     }
-
-    return v;
 }

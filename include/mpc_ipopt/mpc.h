@@ -3,6 +3,7 @@
 
 #include <cppad/cppad.hpp>
 #include <eigen3/Eigen/Core>
+#include <map>
 
 #include "mpc_ipopt/helpers.h"
 
@@ -137,7 +138,7 @@ namespace mpc_ipopt {
 
 
         // Calculates x,y,theta from velocity (stored in the constraints) and initial state.
-        [[nodiscard]] std::vector<State> get_states(const Dvector &cons, const State &initial) const;
+        void get_states(const Dvector &cons, const State &initial, std::vector<State> &path_vector) const;
 
     public:
 
@@ -151,7 +152,15 @@ namespace mpc_ipopt {
         // Calculate's optimal acceleration for given state and constraints.
         // acc is set by the function.
         // TODO: take previous acceleration?
-        bool solve(std::pair<double, double> &acc);
+        struct Result {
+            size_t status;
+            std::pair<double, double> acc;
+            std::vector<State> path;
+        };
+
+        bool solve(Result &result, bool get_path = false);
+
+        const static std::map<size_t, std::string> error_string;
 
 
         // This sets the cost function and calculates constraints from variables
