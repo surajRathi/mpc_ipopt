@@ -36,7 +36,7 @@ namespace mpc_ipopt {
     using State = State_<Dvector::value_type>;
 
 
-    // Stores a pair of values: 'low' and 'high'
+    // Stores a pair of values (of type T) : 'low' and 'high'
     template<typename T>
     struct LH {
         T low, high;
@@ -64,8 +64,7 @@ namespace mpc_ipopt {
     class MPC {
     public:
         // Diffrentiable vector of doubles
-        // Can also use std::vector or std::valarray
-        using ADvector = vector<CppAD::AD<double>>; // Exposed for ipopt
+        using ADvector = vector<CppAD::AD<double>>; // Exposed publicallyfor ipopt
     private:
         // Diffrentiable version of state
         // required in operator()
@@ -121,6 +120,7 @@ namespace mpc_ipopt {
         LH<Dvector> vars_b, cons_b;
 
         // TODO: move to helper.h
+        // Wraps ADvector &outputs to access constraints easily.
         class ConsWrapper {
             ADvector &_outputs;
         public:
@@ -133,7 +133,7 @@ namespace mpc_ipopt {
 
 
         // Calculates x,y,theta from velocity (stored in the constraints) and initial state.
-        std::vector<State> get_states(const Dvector &cons, const State &initial);
+        [[nodiscard]] std::vector<State> get_states(const Dvector &cons, const State &initial) const;
 
     public:
 
@@ -145,12 +145,14 @@ namespace mpc_ipopt {
         Dvector global_plan;
 
         // Calculate's optimal acceleration for given state and constraints.
+        // acc is set by the function.
+        // TODO: take previous acceleration?
         bool solve(std::pair<double, double> &acc);
 
 
         // This sets the cost function and calculates constraints from variables
-        // ONLY CALLED BY IPOPT
-        void operator()(ADvector &outputs, ADvector &vars);
+        // ONLY TO BE CALLED BY IPOPT
+        void operator()(ADvector &outputs, ADvector &vars) const;
     };
 
     // Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...

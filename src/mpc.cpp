@@ -121,7 +121,7 @@ bool MPC::solve(std::pair<double, double> &acc) {
     return true;
 }
 
-void MPC::operator()(ADvector &outputs, ADvector &vars) {
+void MPC::operator()(ADvector &outputs, ADvector &vars) const {
     outputs[0] = 0;
     auto &objective_func = outputs[0];
     ConsWrapper cons{outputs};
@@ -224,7 +224,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) {
     }
 }
 
-std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) {
+std::vector<State> MPC::get_states(const Dvector &cons, const State &initial) const {
     std::vector<State> v;
     v.emplace_back(initial);
 
