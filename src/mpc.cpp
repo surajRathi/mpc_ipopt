@@ -1,5 +1,6 @@
 #include <iostream>
 #include <chrono>
+#include <random>
 
 #include <mpc_ipopt/mpc.h>
 
@@ -58,6 +59,8 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     // _vars auto inited to 0
     // Init bounds
     for (auto i : indices.a_r() + indices.a_l()) {
+        _vars[i] = pow(-1, i) * 0.01;
+
         vars_b.low[i] = params.limits.acc.low;
         vars_b.high[i] = params.limits.acc.high;
     }
@@ -107,6 +110,17 @@ bool MPC::solve(Result &result, bool get_path) {
 
     if (solution.status != CppAD::ipopt::solve_result<Dvector>::success) {
         result.status = solution.status;
+
+        if (solution.status == CppAD::ipopt::solve_result<Dvector>::local_infeasibility) {
+            std::random_device rd{};
+            std::mt19937 gen{rd()};
+            std::normal_distribution<> d{0.05, 0.1};
+
+            for (auto i : indices.a_r() + indices.a_l()) {
+                _vars[i] = d(gen);
+            }
+        }
+
         return false;
     }
     /*std::cout << std::fixed
