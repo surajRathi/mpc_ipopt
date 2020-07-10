@@ -54,8 +54,10 @@ namespace mpc_ipopt {
             LH<double> vel, acc;
         } limits;
 
+        // NOTE TODO: Params all have different scales
+        // e.g. etheta ~< 1 and cte >~ 1
         struct Weights {
-            double acc, vel, cte;
+            double acc, vel, cte, etheta;
         } wt;
 
         double v_ref;
@@ -163,6 +165,15 @@ namespace mpc_ipopt {
         Tx ret = 0, pow = 1;
         for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
             ret += coeffs[i] * pow;
+        }
+        return ret;
+    }
+
+    template<typename Tc, typename Tx>
+    Tx deriveval(const Tx &x, const Tc &coeffs) {
+        Tx ret = 0, pow = 1;
+        for (decltype(coeffs.size()) i = 1; i < coeffs.size(); i++, pow *= x) {
+            ret += i * coeffs[i] * pow;
         }
         return ret;
     }

@@ -1,4 +1,4 @@
-#include <iostream>
+//#include <iostream>
 
 #include <mpc_ipopt/mpc.h>
 
@@ -16,7 +16,7 @@ MPC::MPC(Params p) : params(p), dt(1.0 / p.forward.frequency), steps(params.forw
     // CppAD::ipopt options
     options += "Integer print_level  0\n"; // Disables all debug information
     options += "String sb yes\n"; // Disables printing IPOPT creator banner
-    // TODO take as pparams
+    // TODO take as params
     options += "Sparse  true        forward\n";
     //options += "Sparse  true        reverse\n";
     options += "Numeric max_cpu_time          0.5\n";
@@ -228,6 +228,8 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
         objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2);// - 2 * params.v_ref, 2);
 
         objective_func += params.wt.cte * CppAD::pow(polyeval(x, global_plan) - y, 2);
+
+        objective_func += params.wt.cte * CppAD::pow(CppAD::atan(deriveval(x, global_plan)) - theta, 2);
 
         prev.x = x, prev.y = y, prev.theta = theta, prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
