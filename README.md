@@ -1,7 +1,7 @@
 # mpc_ipopt
 Uses Model Predictive Control for path planning of a diffrential drive vehicle. Uses IPOPT 
 
-Moved to project-TARIV/mpc_ipopt . Based on project-TARIV/mpc_lib
+Moved to [project-TARIV/mpc_ipopt](https://github.com/project-TARIV/mpc_ipopt) . Based on [project-TARIV/mpc_lib](https://github.com/project-TARIV/mpc_lib)
 
 
 ## Dependencties
@@ -32,9 +32,9 @@ We solve an optimisation problem for acceleration in each motor.
 
 - A simple kinematic model has been selected  
 If v_r and v_l are velocities in either frame, and a_r and a_l are the respective constraints.  
-x_i = x_{i-1} + (v_r + v_l) * dt * cos(theta_{i-1}) / 2 
-y_i = y_{i-1} + (v_r + v_l) * dt * sin(theta_{i-1}) / 2
-theta_i = theta_{i-1} + (v_r - v_l) * dt / distance_between_wheels
+x<sub>i</sub> = x<sub>i-1</sub> + (v_r + v_l) * dt * cos(theta<sub>i-1</sub>) / 2 
+y<sub>i</sub> = y<sub>i-1</sub> + (v_r + v_l) * dt * sin(theta<sub>i-1</sub>) / 2
+theta<sub>i</sub> = theta<sub>i-1</sub> + (v_r - v_l) * dt / distance_between_wheels
 
 
 - Constraints
@@ -55,5 +55,5 @@ It is easy to expand to this list.
 
 ## References
 
-[Based on project-TARIV/mpc_lib](https://github.com/project-TARIV/mpc_lib)  
+Based on [project-TARIV/mpc_lib](https://github.com/project-TARIV/mpc_lib)  
 Am a member of that organisation.
