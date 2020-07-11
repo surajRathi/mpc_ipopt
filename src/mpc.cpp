@@ -112,13 +112,25 @@ bool MPC::solve(Result &result, bool get_path) {
         result.status = solution.status;
 
         if (solution.status == CppAD::ipopt::solve_result<Dvector>::local_infeasibility) {
+//            std::cout << "Choosing new vars.." << std::endl;
             std::random_device rd{};
             std::mt19937 gen{rd()};
-            std::normal_distribution<> d{0.05, 0.1};
+            std::normal_distribution<> d{0.1, 0.2};
+//            std::normal_distribution<> d{0.05, 0.1};
+
+            options = "";
+            // options += "Integer print_level  0\n"; // Disables all debug information
+            options += "String sb yes\n"; // Disables printing IPOPT creator banner
+            // TODO take as params
+            options += "Sparse  true        forward\n";
+            //options += "Sparse  true        reverse\n";
+            options += "Numeric max_cpu_time          0.5\n";
 
             for (auto i : indices.a_r() + indices.a_l()) {
                 _vars[i] = d(gen);
+                std::cout << _vars[i] << ", ";
             }
+            std::cout << std::endl;
         }
 
         return false;
@@ -250,14 +262,16 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
 
 
         objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] + vars[*a_l_r], 2);
-        objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] - vars[*a_l_r], 2);
+        // objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] - vars[*a_l_r], 2);
 
         objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] + cons[*v_l_r] - 2 * params.v_ref, 2);
-        objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2);// - 2 * params.v_ref, 2);
+        objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2) / 2;// - 2 * params.v_ref, 2);
 
         objective_func += params.wt.cte * CppAD::pow(polyeval(x, global_plan) - y, 2);
 
-        objective_func += params.wt.cte * CppAD::pow(CppAD::atan(deriveval(x, global_plan)) - theta, 2);
+//        objective_func += params.wt.etheta * CppAD::pow(CppAD::atan(deriveval(x, global_plan)) - theta, 2);
+        objective_func +=
+                params.wt.etheta * CppAD::pow(CppAD::atan2(deriveval(x, global_plan), directionality) - theta, 2);
 
         prev.x = x, prev.y = y, prev.theta = theta, prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;

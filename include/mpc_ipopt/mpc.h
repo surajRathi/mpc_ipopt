@@ -136,18 +136,20 @@ namespace mpc_ipopt {
             // const ADvector::value_type &operator[](size_t index) const { return _outputs[1 + index]; }
         };
 
-
         // Calculates x,y,theta from velocity (stored in the constraints) and initial state.
         void get_states(const Dvector &cons, const State &initial, std::vector<State> &path_vector) const;
 
     public:
 
-        explicit MPC(Params p);
 
+        explicit MPC(Params p);
 
         // These should be updated before calling solve
         State state;
         Dvector global_plan;
+        // Used to properly calculate atan for the full range of -pi to pi
+        CppAD::AD<double> directionality{1}; // Should be +- 1
+
 
         // Calculate's optimal acceleration for given state and constraints.
         // acc is set by the function.
