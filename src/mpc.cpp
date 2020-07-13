@@ -269,9 +269,9 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
 
         objective_func += params.wt.cte * CppAD::pow(polyeval(x, global_plan) - y, 2);
 
-//        objective_func += params.wt.etheta * CppAD::pow(CppAD::atan(deriveval(x, global_plan)) - theta, 2);
-        objective_func +=
-                params.wt.etheta * CppAD::pow(CppAD::atan2(deriveval(x, global_plan), directionality) - theta, 2);
+        objective_func += params.wt.etheta * CppAD::pow(CppAD::atan(deriveval(x, global_plan)) - theta, 2);
+//        objective_func +=
+  //              params.wt.etheta * CppAD::pow(CppAD::atan2(deriveval(x, global_plan), directionality) - theta, 2);
 
         prev.x = x, prev.y = y, prev.theta = theta, prev.v_r = cons[*v_r_r], prev.v_l = cons[*v_l_r];
         ++a_r_r, ++a_l_r, ++v_r_r, ++v_l_r;
