@@ -137,10 +137,10 @@ namespace mpc_ipopt {
         };
 
         // Calculates x,y,theta from velocity (stored in the constraints) and initial state.
+        // Store in the given vector
         void get_states(const Dvector &cons, const State &initial, std::vector<State> &path_vector) const;
 
     public:
-
 
         explicit MPC(Params p);
 
@@ -148,46 +148,29 @@ namespace mpc_ipopt {
         State state;
         Dvector global_plan;
         // Used to properly calculate atan for the full range of -pi to pi
-        CppAD::AD<double> directionality{1}; // Should be +- 1
+        CppAD::AD<double> directionality{1}; // Should be +- 1 ONLY
 
 
-        // Calculate's optimal acceleration for given state and constraints.
-        // acc is set by the function.
-        // TODO: take previous acceleration?
         struct Result {
             size_t status;
             std::pair<double, double> acc;
             std::vector<State> path;
         };
 
+        // Calculate's optimal acceleration for given state and constraints.
+        // acc is set by the function.
+        // TODO: take previous acceleration?
         bool solve(Result &result, bool get_path = false);
 
-        const static std::map<size_t, std::string> error_string;
 
+        // Get erroname from error code (Result::status)
+        const static std::map<size_t, std::string> error_string;
 
         // This sets the cost function and calculates constraints from variables
         // ONLY TO BE CALLED BY IPOPT
         void operator()(ADvector &outputs, ADvector &vars) const;
     };
 
-    // Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...
-    template<typename Tc, typename Tx>
-    Tx polyeval(const Tx &x, const Tc &coeffs) {
-        Tx ret = 0, pow = 1;
-        for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
-            ret += coeffs[i] * pow;
-        }
-        return ret;
-    }
-
-    template<typename Tc, typename Tx>
-    Tx deriveval(const Tx &x, const Tc &coeffs) {
-        Tx ret = 0, pow = 1;
-        for (decltype(coeffs.size()) i = 1; i < coeffs.size(); i++, pow *= x) {
-            ret += i * coeffs[i] * pow;
-        }
-        return ret;
-    }
 }
 
 #endif //MPC_IPOPT_MPC_H

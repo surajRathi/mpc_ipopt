@@ -2,57 +2,82 @@
 #define MPC_IPOPT_HELPERS_H
 // TODO: Move to a .cpp file?
 
-/*
- * This is a class similar to Python's range builtin
- * It works with c++ for each loop
- *
- * for (auto i : Range(3, 6)) { // Do something }
- * This will loop with i = 3, 4, 5
- *
- * This functions as an iterator too.
+namespace mpc_ipopt {
+    // Finds f(x) where f = coeffs[0] + coeffs[1] * x + coeffs[2] * x^2 ...
+    template<typename Tc, typename Tx>
+    Tx polyeval(const Tx &x, const Tc &coeffs) {
+        Tx ret = 0, pow = 1;
+        for (decltype(coeffs.size()) i = 0; i < coeffs.size(); i++, pow *= x) {
+            ret += coeffs[i] * pow;
+        }
+        return ret;
+    }
+
+    template<typename Tc, typename Tx>
+    Tx deriveval(const Tx &x, const Tc &coeffs) {
+        Tx ret = 0, pow = 1;
+        for (decltype(coeffs.size()) i = 1; i < coeffs.size(); i++, pow *= x) {
+            ret += i * coeffs[i] * pow;
+        }
+        return ret;
+    }
+
+    /*
+     * This is a class similar to Python's range builtin
+     * It works with c++ for each loop
+     *
+     * for (auto i : Range(3, 6)) { // Do something }
+     * This will loop with i = 3, 4, 5
+     *
+     * This functions as an iterator too.
  */
-class Range {
-    size_t cur;
-    const size_t last;
-public:
-    Range(size_t start, const size_t end) : cur(start), last(end) {}
+    class Range {
+        size_t cur;
+        const size_t last;
+    public:
+        Range(size_t start, const size_t end) : cur(start), last(end) {}
 
-    // Iterable functions
-    [[nodiscard]] const Range &begin() const { return *this; }
+        // Iterable functions
+        [[nodiscard]] const Range &begin() const { return *this; }
 
-    [[nodiscard]] const Range &end() const { return *this; }
+        [[nodiscard]] const Range &end() const { return *this; }
 
-    // Iterator functions
-    bool operator!=(const Range &r) const { return cur < r.last; }
+        // Iterator functions
+        bool operator!=(const Range &r) const { return cur < r.last; }
 
-    void operator++() { ++cur; }
+        void operator++() { ++cur; }
 
-    size_t operator*() const { return cur; }
+        size_t operator*() const { return cur; }
 
-    size_t operator[](size_t index) const {
-        assert(index < length());
-        return cur + index;
-    }
+        size_t operator[](size_t index) const {
+            assert(index < length());
+            return cur + index;
+        }
 
-    [[nodiscard]] size_t length() const { return last - cur; }
+        [[nodiscard]] size_t length() const { return last - cur; }
 
-    friend Range operator+(const Range &a, const Range &b) {
-        assert(a.last == b.cur);
-        return {a.cur, b.last};
-    }
-};
+        friend Range operator+(const Range &a, const Range &b) {
+            assert(a.last == b.cur);
+            return {a.cur, b.last};
+        }
+    };
+}
 
 
+// IGNORE:
+/*
 // ONLY USE WITH Range
 template<typename T1, typename T2>
 class zip2 {
     std::pair<T1, T2> containers;
 public:
     zip2(T1 t1, T2 t2) : containers(std::make_pair(t1, t2)) {
-        /*
+        */
+/*
          * this.val_end = std::end(containers[0]));
          * this.containers = std::make_tuple(std::begin(containers[0]), std::begin(containers[1]));
-         */
+         *//*
+
     }
 
     auto begin() { return *this; }
@@ -61,7 +86,9 @@ public:
 
     bool operator!=(const zip2 &r) const {
         return containers.first != r.containers.first;
-        /* return this.containers[0] != this.val_end; */
+        */
+/* return this.containers[0] != this.val_end; *//*
+
     }
 
     void operator++() {
@@ -95,6 +122,7 @@ public:
     }
 };
 
+*/
 
 
 // DONT BE STUID
