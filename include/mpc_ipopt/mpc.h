@@ -58,7 +58,7 @@ namespace mpc_ipopt {
         // NOTE TODO: Params all have different scales
         // e.g. etheta ~< 1 and cte >~ 1
         struct Weights {
-            double acc, vel, cte, etheta;
+            double acc, vel, omega, cte, etheta;
         } wt;
 
         double v_ref;

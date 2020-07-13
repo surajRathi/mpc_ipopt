@@ -265,7 +265,7 @@ void MPC::operator()(ADvector &outputs, ADvector &vars) const {
         // objective_func += params.wt.acc * CppAD::pow(vars[*a_r_r] - vars[*a_l_r], 2);
 
         objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] + cons[*v_l_r] - 2 * params.v_ref, 2);
-        objective_func += params.wt.vel * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2) / 2;// - 2 * params.v_ref, 2);
+        objective_func += params.wt.omega * CppAD::pow(cons[*v_r_r] - cons[*v_l_r], 2) / 2;// - 2 * params.v_ref, 2);
 
         objective_func += params.wt.cte * CppAD::pow(polyeval(x, global_plan) - y, 2);
 
